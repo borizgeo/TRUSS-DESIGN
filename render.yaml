@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: hss-truss-designer
+    runtime: docker
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 8501
+      - key: HSS_TRUSS_DB_FILE
+        value: /data/designs_database.json
+    disk:
+      name: hss-truss-data
+      mountPath: /data
+      sizeGB: 1
