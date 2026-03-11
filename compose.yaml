@@ -4,3 +4,13 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - PORT=8501
+      - HSS_TRUSS_DB_FILE=/data/designs_database.json
+    volumes:
+      - hss_truss_data:/data
+
+volumes:
+  hss_truss_data:

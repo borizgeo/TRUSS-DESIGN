@@ -4,7 +4,7 @@ services:
     runtime: docker
     plan: starter
     autoDeploy: true
-    healthCheckPath: /
+    healthCheckPath: /_stcore/health
     envVars:
       - key: PORT
         value: 8501
