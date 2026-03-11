@@ -1,0 +1,6 @@
+services:
+  hsstrussdesigner:
+    image: hsstrussdesigner
+    build:
+      context: .
+      dockerfile: ./Dockerfile

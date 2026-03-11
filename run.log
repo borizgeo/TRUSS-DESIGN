@@ -1,0 +1,25 @@
+[2026-03-11 13:40:48.64] HSS Truss Designer launcher started
+Script directory initialized
+User: Owner
+[2026-03-11 13:40:48.70] Checking Python availability
+C:\Windows\py.exe
+C:\Windows\py.exe
+[2026-03-11 13:40:49] launch_app.py started with interpreter: C:\Program Files\Python310\python.exe
+[2026-03-11 13:40:49.16] Python command selected: C:\Windows\py.exe -3
+[2026-03-11 13:40:49.21] Python executable resolved to: C:\Program Files\Python310\python.exe
+[2026-03-11 13:40:49.24] GUI Python command selected: C:\Program Files\Python310\pythonw.exe
+[2026-03-11 13:40:49.57] Launching application
+[2026-03-11 13:40:49.59] Starting GUI process: C:\Program Files\Python310\pythonw.exe  launch_app.py
+[2026-03-11 13:40:49.63] Launcher finished successfully
+[2026-03-11 13:40:49] launch_app.py started with interpreter: C:\Program Files\Python310\pythonw.exe
+[2026-03-11 13:40:50] main.py created TrussDesignerApp successfully
+[2026-03-11 13:40:51] main.py UI initialized successfully; window state=normal
+[2026-03-11 13:40:51] main.py entered mainloop successfully
+[2026-03-11 13:40:52] main.py starting
+[2026-03-11 13:40:53] main.py created TrussDesignerApp successfully
+[2026-03-11 13:40:54] main.py UI initialized successfully; window state=normal
+[2026-03-11 13:40:54] main.py entered mainloop successfully
+[2026-03-11 13:40:59] main.py mainloop exited
+[2026-03-11 13:40:59] Application exited normally.
+[2026-03-11 13:41:01] main.py mainloop exited
+[2026-03-11 13:41:01] Application exited normally.

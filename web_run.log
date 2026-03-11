@@ -1,0 +1,13 @@
+[2026-03-11 14:51:07.89] HSS Truss web launcher started
+Script directory initialized
+User: Owner
+[2026-03-11 14:51:07.94] Checking Python availability
+C:\Windows\py.exe
+[2026-03-11 14:51:08.16] Candidate accepted: C:\Windows\py.exe -3 to C:\Program Files\Python310\python.exe
+C:\Windows\py.exe
+[2026-03-11 14:51:08.39] Candidate accepted: C:\Windows\py.exe -3 to C:\Program Files\Python310\python.exe
+[2026-03-11 14:51:08.42] Python command selected: C:\Windows\py.exe -3
+[2026-03-11 14:51:08.44] Python executable resolved to: C:\Program Files\Python310\python.exe
+[2026-03-11 14:51:09.59] Starting Streamlit server
+[2026-03-11 14:51:10] launch_web_server.py started with interpreter: C:\Program Files\Python310\python.exe
+[2026-03-11 14:51:13.27] Local browser opened at http://localhost:8501
