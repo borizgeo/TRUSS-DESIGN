@@ -6,8 +6,6 @@ services:
     autoDeploy: true
     healthCheckPath: /
     envVars:
-      - key: PORT
-        value: 8501
       - key: HSS_TRUSS_DB_FILE
         value: /data/designs_database.json
     disk:
