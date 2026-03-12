@@ -20,6 +20,7 @@ from webapp_core import (
     save_result_to_database,
     section_options,
 )
+from load_combinations import COMBO_SET_NAMES, LOAD_TYPES
 
 
 st.set_page_config(
@@ -168,9 +169,10 @@ st.markdown(
 )
 
 
-def render_metric_card(label, value):
+def render_metric_card(label, value, subtitle=''):
+    sub_html = '<div class="small-note" style="margin-top:2px;">%s</div>' % subtitle if subtitle else ''
     st.markdown(
-        '<div class="metric-card"><div class="metric-label">%s</div><div class="metric-value">%s</div></div>' % (label, value),
+        '<div class="metric-card"><div class="metric-label">%s</div><div class="metric-value">%s</div>%s</div>' % (label, value, sub_html),
         unsafe_allow_html=True,
     )
 
@@ -193,15 +195,24 @@ def collect_inputs():
         st.caption('Run this on the server, then let colleagues open http://%s:8501' % current_hostname())
         with st.form('design_inputs'):
             truss_type = st.selectbox('Truss type', TRUSS_TYPES, index=0)
-            span_ft = st.number_input('Span (ft)', min_value=10.0, value=60.0, step=1.0)
-            dl_kpf = st.number_input('Dead load (kip/ft)', min_value=0.0, value=0.90, step=0.05, format='%.3f')
-            ll_kpf = st.number_input('Live load (kip/ft)', min_value=0.0, value=0.60, step=0.05, format='%.3f')
-            auto_depth = st.checkbox('Auto depth', value=True)
+            span_ft = float(st.text_input('Span (ft)', value='60.0'))
+
+            st.markdown('### Applied Loads')
+            dl_kpf = float(st.text_input('Dead load (kip/ft)', value='0.900'))
+            ll_kpf = float(st.text_input('Live load (kip/ft)', value='0.600'))
+            lr_kpf = float(st.text_input('Roof live load (kip/ft)', value='0.000'))
+            s_kpf = float(st.text_input('Snow load (kip/ft)', value='0.000'))
+            w_kpf = float(st.text_input('Wind load (kip/ft)', value='0.000'))
+            e_kpf = float(st.text_input('Seismic load (kip/ft)', value='0.000'))
+
+            st.markdown('### Load Combinations')
+            combo_set_name = st.selectbox('Design standard', COMBO_SET_NAMES, index=0)
+
+            spacing_ft = float(st.text_input('Spacing (ft o/c)', value='10.0'))
             suggested_depth = default_depth(span_ft)
-            depth_ft = suggested_depth if auto_depth else st.number_input('Depth (ft)', min_value=2.0, value=float(suggested_depth), step=0.5)
-            auto_panels = st.checkbox('Auto top panels', value=True)
             suggested_panels = default_display_panels(span_ft, truss_type)
-            display_panels = suggested_panels if auto_panels else int(st.number_input('Top panels', min_value=2, value=int(suggested_panels), step=1))
+            depth_ft = float(st.text_input('Depth (ft)', value='%.2f' % suggested_depth))
+            display_panels = int(float(st.text_input('Top panels', value='%d' % suggested_panels)))
             defl_limit = st.selectbox('Deflection limit', DEFLECTION_LIMITS, index=2, format_func=lambda value: 'L / %d' % value)
             st.markdown('### Section Overrides')
             top_override = st.selectbox('Top chord', options, index=0)
@@ -218,21 +229,28 @@ def collect_inputs():
         'DIAGONAL': diagonal_override,
         'VERTICAL': vertical_override,
     })
+    load_dict = {
+        'D': dl_kpf,
+        'L': ll_kpf,
+        'Lr': lr_kpf,
+        'S': s_kpf,
+        'W': w_kpf,
+        'E': e_kpf,
+    }
     return {
+        'spacing_ft': spacing_ft,
         'truss_type': truss_type,
         'span_ft': span_ft,
         'dl_kpf': dl_kpf,
         'll_kpf': ll_kpf,
+        'loads': load_dict,
+        'combo_set_name': combo_set_name,
         'depth_ft': depth_ft,
         'display_panels': display_panels,
         'defl_limit': defl_limit,
         'overrides': overrides,
         'calculate_clicked': calculate_clicked,
         'optimize_clicked': optimize_clicked,
-        'auto_depth': auto_depth,
-        'auto_panels': auto_panels,
-        'suggested_depth': suggested_depth,
-        'suggested_panels': suggested_panels,
     }
 
 
@@ -252,6 +270,9 @@ if inputs['calculate_clicked']:
             inputs['truss_type'],
             inputs['defl_limit'],
             override_sections=inputs['overrides'],
+            loads=inputs['loads'],
+            combo_set_name=inputs['combo_set_name'],
+            spacing_ft=inputs['spacing_ft'],
         )
         st.session_state['flash_message'] = 'Design updated.'
     except Exception as error:
@@ -268,6 +289,9 @@ if inputs['optimize_clicked']:
             inputs['truss_type'],
             inputs['defl_limit'],
             override_sections=inputs['overrides'],
+            loads=inputs['loads'],
+            combo_set_name=inputs['combo_set_name'],
+            spacing_ft=inputs['spacing_ft'],
         )
         st.session_state['flash_message'] = st.session_state['result'].get('optimization_note', 'Optimization completed.')
     except Exception as error:
@@ -282,14 +306,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
-if inputs['auto_depth'] or inputs['auto_panels']:
-    note_parts = []
-    if inputs['auto_depth']:
-        note_parts.append('Auto depth = %.2f ft' % inputs['suggested_depth'])
-    if inputs['auto_panels']:
-        note_parts.append('Auto top panels = %d' % inputs['suggested_panels'])
-    st.markdown('<p class="small-note">%s</p>' % ' | '.join(note_parts), unsafe_allow_html=True)
 
 if st.session_state.get('flash_error'):
     st.error(st.session_state.pop('flash_error'))
@@ -315,15 +331,19 @@ with metric_cols[1]:
 with metric_cols[2]:
     render_metric_card('Max Deflection', '%.3f in' % summary['max_defl_in'])
 with metric_cols[3]:
-    render_metric_card('Factored Load', '%.3f k/ft' % result['wu_kpf'])
+    combo_label = result.get('governing_combo', '')
+    render_metric_card('Factored Load', '%.3f k/ft' % result['wu_kpf'], subtitle=combo_label)
 
-tab_overview, tab_plots, tab_schedule, tab_report, tab_database = st.tabs([
-    'Overview', 'Plots', 'Schedule', 'Report', 'Database'
+tab_overview, tab_plots, tab_schedule, tab_report, tab_combos, tab_database = st.tabs([
+    'Overview', 'Plots', 'Schedule', 'Report', 'Load Combos', 'Database'
 ])
 
 with tab_overview:
     st.markdown('<div class="surface-card geometry-card">', unsafe_allow_html=True)
-    truss_figure = create_truss_interactive_figure(result['nodes'], result['members'], summary, result['truss_type'])
+    truss_figure = create_truss_interactive_figure(
+        result['nodes'], result['members'], summary, result['truss_type'],
+        spacing_ft=result.get('spacing_ft', 0.0),
+    )
     st.plotly_chart(
         truss_figure,
         use_container_width=True,
@@ -421,11 +441,40 @@ with tab_report:
     )
     st.text_area('Design report', value=result['report_text'], height=540)
 
+with tab_combos:
+    combo_results = result.get('combo_results')
+    governing = result.get('governing_combo', '')
+    st.markdown('#### Design Standard: %s' % result.get('combo_set_name', 'N/A'))
+    st.markdown('#### Governing Combination: **%s** &rarr; wu = **%.3f kip/ft**' % (governing, result['wu_kpf']),
+                unsafe_allow_html=True)
+    if combo_results:
+        combo_rows = []
+        for cr in combo_results:
+            combo_rows.append({
+                'Combination': cr['label'],
+                'wu (kip/ft)': round(cr['wu'], 4),
+                'Governs': 'YES' if cr['label'] == governing else '',
+            })
+        st.dataframe(pd.DataFrame(combo_rows), use_container_width=True, hide_index=True)
+    else:
+        st.info('Run a design with a selected standard to see all combo results.')
+    st.markdown('#### Applied Service Loads')
+    load_dict = result.get('loads') or {'D': result['dl_kpf'], 'L': result['ll_kpf']}
+    load_rows = []
+    from load_combinations import LOAD_TYPES as _LT
+    for key, label in _LT:
+        val = load_dict.get(key, 0.0)
+        load_rows.append({'Load Type': label.replace(' (kip/ft)', ''), 'Key': key, 'Value (kip/ft)': val})
+    st.dataframe(pd.DataFrame(load_rows), use_container_width=True, hide_index=True)
+
 with tab_database:
+    project_number = st.text_input('Project number', value='', key='project_number')
     notes = st.text_input('Optional notes before saving', key='save_notes')
     if st.button('Save current design to database', use_container_width=True):
         try:
-            save_result_to_database(result, notes=notes)
+            save_result_to_database(result, notes=notes,
+                                    project_number=project_number,
+                                    spacing_ft=result.get('spacing_ft', 0.0))
             st.success('Design saved to designs_database.json')
         except Exception as error:
             st.error(str(error))

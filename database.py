@@ -24,11 +24,14 @@ def _save(designs):
 
 
 def save_design(span_ft, load_kpf, depth_ft, n_panels, top_chord, bottom_chord,
-                web, total_weight_lbs, max_defl_in, defl_ratio, notes=""):
+                web, total_weight_lbs, max_defl_in, defl_ratio, notes="",
+                project_number="", spacing_ft=0.0):
     designs = _load()
     entry = {
         "id":               len(designs) + 1,
         "date":             datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "project_number":   project_number,
+        "spacing_ft":       round(spacing_ft, 2),
         "span_ft":          round(span_ft, 2),
         "load_kpf":         round(load_kpf, 3),
         "depth_ft":         round(depth_ft, 2),

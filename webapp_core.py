@@ -19,6 +19,12 @@ from engine import (
     recommended_depth,
     recommended_panels,
 )
+from load_combinations import (
+    COMBO_SET_NAMES,
+    COMBO_SETS,
+    LOAD_TYPES,
+    compute_factored_load,
+)
 from sections import SECTIONS, SECTIONS_BY_AREA
 
 
@@ -252,7 +258,9 @@ def build_member_schedule_csv(members):
 
 
 def build_report(span_ft, dl_kpf, ll_kpf, wu_kpf, depth_ft, n_panels,
-                 truss_type, defl_limit, summary, members):
+                 truss_type, defl_limit, summary, members,
+                 loads=None, combo_set_name=None, governing_combo=None,
+                 combo_results=None):
     display_panels = display_panels_from_internal(n_panels, truss_type)
     lines = []
     sep = '=' * 72
@@ -272,12 +280,29 @@ def build_report(span_ft, dl_kpf, ll_kpf, wu_kpf, depth_ft, n_panels,
         '  Depth               : %.2f ft  (%.0f in)' % (depth_ft, depth_ft * 12),
         '  Top Panels          : %d' % display_panels,
         '  Panel Length        : %.2f ft  (%.1f in)' % (span_ft / n_panels, span_ft / n_panels * 12),
-        '  Dead Load (service) : %.3f kip/ft' % dl_kpf,
-        '  Live Load (service) : %.3f kip/ft' % ll_kpf,
-        '  Factored Load (wu)  : %.3f kip/ft  [1.25D + 1.5L]' % wu_kpf,
+    ]
+    if loads:
+        for key, label in LOAD_TYPES:
+            val = loads.get(key, 0.0)
+            if val > 0:
+                lines.append('  %-22s: %.3f kip/ft' % (label.replace(' (kip/ft)', ''), val))
+    else:
+        lines.append('  Dead Load (service) : %.3f kip/ft' % dl_kpf)
+        lines.append('  Live Load (service) : %.3f kip/ft' % ll_kpf)
+    combo_label = governing_combo or '1.25D + 1.5L'
+    code_label = combo_set_name or 'NBCC / CISC LSD'
+    lines += [
+        '  Load Combo Standard : %s' % code_label,
+        '  Factored Load (wu)  : %.3f kip/ft  [%s]' % (wu_kpf, combo_label),
         '  Deflection Limit    : L / %d' % defl_limit,
         '',
     ]
+    if combo_results:
+        lines += ['LOAD COMBINATION RESULTS', sep2]
+        for cr in combo_results:
+            marker = '  <-- governs' if cr['label'] == governing_combo else ''
+            lines.append('  %-34s  wu = %.3f kip/ft%s' % (cr['label'], cr['wu'], marker))
+        lines.append('')
     top_chord = summary.get('top_chord')
     bottom_chord = summary.get('bottom_chord')
     web = summary.get('web')
@@ -338,8 +363,17 @@ def build_report(span_ft, dl_kpf, ll_kpf, wu_kpf, depth_ft, n_panels,
 
 
 def run_design(span_ft, dl_kpf, ll_kpf, depth_ft, display_panels, truss_type,
-               defl_limit, override_sections=None):
-    wu_kpf = factored_load(dl_kpf, ll_kpf)
+               defl_limit, override_sections=None,
+               loads=None, combo_set_name=None,
+               spacing_ft=0.0):
+    # Compute factored load from full load set or legacy two-load shortcut
+    if loads and combo_set_name:
+        wu_kpf, governing_combo, combo_results = compute_factored_load(loads, combo_set_name)
+    else:
+        wu_kpf = factored_load(dl_kpf, ll_kpf)
+        governing_combo = '1.25D + 1.5L' if wu_kpf == 1.25 * dl_kpf + 1.5 * ll_kpf else '1.4D'
+        combo_results = None
+
     n_panels = internal_panels_from_display(display_panels, truss_type)
     nodes, members = build_geometry_for_type(truss_type, span_ft, depth_ft, n_panels)
     members, summary = design_members(
@@ -362,6 +396,10 @@ def run_design(span_ft, dl_kpf, ll_kpf, depth_ft, display_panels, truss_type,
         defl_limit,
         summary,
         members,
+        loads=loads,
+        combo_set_name=combo_set_name,
+        governing_combo=governing_combo,
+        combo_results=combo_results,
     )
     max_dcr = max(member.get('DCR', 0.0) for member in members)
     warnings = []
@@ -392,12 +430,22 @@ def run_design(span_ft, dl_kpf, ll_kpf, depth_ft, display_panels, truss_type,
         'similar_designs': db.find_similar(span_ft, wu_kpf),
         'max_dcr': max_dcr,
         'warnings': warnings,
+        'loads': loads,
+        'combo_set_name': combo_set_name,
+        'governing_combo': governing_combo,
+        'combo_results': combo_results,
+        'spacing_ft': spacing_ft,
     }
 
 
 def optimize_design(span_ft, dl_kpf, ll_kpf, base_depth_ft, base_display_panels,
-                    truss_type, defl_limit, override_sections=None):
-    wu_kpf = factored_load(dl_kpf, ll_kpf)
+                    truss_type, defl_limit, override_sections=None,
+                    loads=None, combo_set_name=None,
+                    spacing_ft=0.0):
+    if loads and combo_set_name:
+        wu_kpf, _, _ = compute_factored_load(loads, combo_set_name)
+    else:
+        wu_kpf = factored_load(dl_kpf, ll_kpf)
     base_panels = internal_panels_from_display(base_display_panels, truss_type)
     depths = sorted(set(max(2.0, round(base_depth_ft * factor * 12.0) / 12.0)
                         for factor in (0.75, 0.875, 1.0, 1.125, 1.25, 1.5)))
@@ -442,6 +490,9 @@ def optimize_design(span_ft, dl_kpf, ll_kpf, base_depth_ft, base_display_panels,
         truss_type,
         defl_limit,
         override_sections=override_sections,
+        loads=loads,
+        combo_set_name=combo_set_name,
+        spacing_ft=spacing_ft,
     )
     optimized['optimization_note'] = (
         'Minimum-weight design found at %.2f ft depth, %d top panels, %.0f lb total weight.' % (
@@ -453,7 +504,8 @@ def optimize_design(span_ft, dl_kpf, ll_kpf, base_depth_ft, base_display_panels,
     return optimized
 
 
-def save_result_to_database(result, notes=''):
+def save_result_to_database(result, notes='',
+                            project_number='', spacing_ft=0.0):
     summary = result['summary']
     top_chord = summary.get('top_chord')
     bottom_chord = summary.get('bottom_chord')
@@ -470,6 +522,8 @@ def save_result_to_database(result, notes=''):
         max_defl_in=summary.get('max_defl_in', 0.0),
         defl_ratio=summary.get('defl_ratio', 0.0),
         notes=notes + '  [DL=%.3f LL=%.3f]' % (result['dl_kpf'], result['ll_kpf']),
+        project_number=project_number,
+        spacing_ft=spacing_ft,
     )
 
 
@@ -477,7 +531,8 @@ def load_saved_designs():
     return db.load_all()
 
 
-def create_truss_figure(nodes, members, summary, truss_type, title_suffix=''):
+def create_truss_figure(nodes, members, summary, truss_type, title_suffix='',
+                        spacing_ft=0.0):
     span = nodes[max(member['j'] for member in members if member['type'] == 'BOTTOM_CHORD')][0]
     depth = max(y for _, y in nodes)
     aspect_ratio = span / max(depth, 1.0)
@@ -556,6 +611,25 @@ def create_truss_figure(nodes, members, summary, truss_type, title_suffix=''):
         bbox=dict(fc='white', ec='#cdd4e5', alpha=0.95, pad=0.55),
     )
 
+    label_lines = []
+    label_lines.append("SPAN: %.0f'" % span)
+    label_lines.append('DEPTH: %.0f"' % (depth * 12))
+    if spacing_ft > 0:
+        label_lines.append("SPACING: %.0f' o/c" % spacing_ft)
+    axis.text(
+        0.984,
+        0.985,
+        '\n'.join(label_lines),
+        transform=axis.transAxes,
+        ha='right',
+        va='top',
+        fontsize=10,
+        color='#000000',
+        fontweight='bold',
+        fontfamily='monospace',
+        bbox=dict(fc='white', ec='#000000', linewidth=1.5, pad=5),
+    )
+
     axis.set_title('Truss Geometry%s' % (f' | {title_suffix}' if title_suffix else ''), fontsize=13, fontweight='bold', pad=12)
     axis.set_xlabel('Length (ft)', fontsize=10)
     axis.set_ylabel('Height (ft)', fontsize=10)
@@ -572,7 +646,8 @@ def create_truss_figure(nodes, members, summary, truss_type, title_suffix=''):
     return figure
 
 
-def create_truss_interactive_figure(nodes, members, summary, truss_type, title_suffix=''):
+def create_truss_interactive_figure(nodes, members, summary, truss_type, title_suffix='',
+                                    spacing_ft=0.0):
     span = nodes[max(member['j'] for member in members if member['type'] == 'BOTTOM_CHORD')][0]
     depth = max(y for _, y in nodes)
     support_nodes = summary.get('display_support_nodes', summary.get('support_nodes', (0, len(nodes) // 2 - 1)))
@@ -708,6 +783,26 @@ def create_truss_interactive_figure(nodes, members, summary, truss_type, title_s
         bgcolor='rgba(255,255,255,0.92)',
         bordercolor='#cdd4e5',
         borderpad=6,
+    )
+
+    label_lines = []
+    label_lines.append("<b>SPAN: %.0f'</b>" % span)
+    label_lines.append('<b>DEPTH: %.0f"</b>' % (depth * 12))
+    if spacing_ft > 0:
+        label_lines.append("<b>SPACING: %.0f' o/c</b>" % spacing_ft)
+    figure.add_annotation(
+        xref='paper',
+        yref='paper',
+        x=0.988,
+        y=0.99,
+        text='<br>'.join(label_lines),
+        showarrow=False,
+        align='left',
+        font=dict(size=13, color='#000000', family='Courier New, monospace'),
+        bgcolor='rgba(255,255,255,0.95)',
+        bordercolor='#000000',
+        borderwidth=2,
+        borderpad=8,
     )
 
     margin_x = max(span * 0.10, 2.0)

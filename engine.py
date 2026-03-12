@@ -8,6 +8,7 @@ Design:   CISC S16-style LSD workflow using ASTM A500 Grade C HSS.
 import math
 import numpy as np
 from sections import SECTIONS, SECTIONS_BY_AREA, FY, FU, E as E_STEEL
+from load_combinations import compute_factored_load, COMBO_SET_NAMES, COMBO_SETS, LOAD_TYPES
 
 PHI_T  = 0.90
 PHI_C  = 0.90
